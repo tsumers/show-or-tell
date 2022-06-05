@@ -1,0 +1,60 @@
+<head>
+    <title>reCAPTCHA demo: Simple page</title>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+</head>
+
+<div id="container-instructions">
+    <div class="instructions well">
+
+        <div id="pageblock">
+
+            <h2>Quick check!</h2>
+
+            <form>
+                <div class="g-recaptcha" data-sitekey="6LchkdEUAAAAAEfFiV2UmQOKBrzoUwRjcvXdpqWa"></div>
+                <br/>
+                <input type="button" value="Submit" id="submit-captcha-form">
+            </form>
+
+        </div>
+
+    <script>
+
+        $("#submit-captcha-form").click(function () {
+
+            var response = grecaptcha.getResponse();
+
+            $.ajax("validate_captcha", {
+                type: "GET",
+                data: {"captcha_string": response},
+                success: function(data){
+                    console.log(data);
+                    if (data["success"] === true){
+
+                        $("#pageblock").html(
+                            `
+							<h2>Thanks for validating</h2>
+							<div>Have fun!</div>
+						    `
+                        );
+                        $("#next").prop('disabled', false);
+                    }
+                }
+            });
+        });
+
+    </script>
+
+    </div>
+        <hr />
+
+    <div class="instructionsnav">
+        <div class="row">
+            <div class="col-xs-5"></div>
+            <div class="col-xs-2 text-center">
+                <button type="button" id="next" value="next" class="btn btn-primary btn-lg continue">Continue</button>
+            </div>
+        </div>
+    </div>
+
+</div>

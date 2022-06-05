@@ -1,0 +1,413 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Load data / packages 
+
+```{r}
+library(lme4)
+library(lmerTest)
+library(multcomp)
+require(ggplot2)
+require(ggiraph)
+require(ggiraphExtra)
+require(plyr)
+library(car)
+library(dplyr)
+library(tidyverse)
+library(broom)
+library(multcomp)
+library(xtable)
+library(broom.mixed)
+
+#install.packages("broom.mixed")
+```
+
+##### EXPERIMENT 1 ##### 
+
+# Transmission Fidelity
+# Main paper, section 2.2.1
+# Biniomial-Logistic regression on number of successes on post-trial questionnaire.
+```{r}
+learner_concept_knowledge_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp1_df.csv")
+
+# Final level only
+learner_concept_knowledge_df <- learner_concept_knowledge_df %>% filter(level_number == 10)
+
+# Sum code communication
+learner_concept_knowledge_df$communication <- factor(learner_concept_knowledge_df$communication)
+contrasts(learner_concept_knowledge_df$communication) = contr.sum(2)
+contrasts(learner_concept_knowledge_df$communication)
+
+# Center complexity
+learner_concept_knowledge_df$boolean_complexity_centered <- learner_concept_knowledge_df$boolean_complexity - (1 + 4 + 6)/3
+
+# Multiply percent-of-concept by 8 to get number correct
+learner_concept_knowledge_df$successes <- learner_concept_knowledge_df$learner_concept * 8
+
+# Main effects only
+xmdl_main = glm(cbind(successes, 8 - successes) ~ communication + boolean_complexity_centered,
+            data=learner_concept_knowledge_df, family='binomial')
+
+# Main effects + interaction
+xmdl_full <- update(xmdl_main, ~ . + boolean_complexity_centered:communication)
+summary(xmdl_full)
+
+anova_comp <- anova(xmdl_main, xmdl_full, test='Chisq')
+anova_comp
+
+# Generate table for appendix
+# xtable(tidy(xmdl_full))
+```
+
+# Inferred Complexity
+# Main paper, section 2.2.2 
+# Linear model predicting the learner's hypothesized concept complexity.
+```{r}
+inferred_complexity_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp1_df.csv")
+
+# Final level only
+inferred_complexity_df <- inferred_complexity_df %>% filter(level_number == 10)
+
+# Sum code communication
+inferred_complexity_df$communication <- factor(inferred_complexity_df$communication)
+contrasts(inferred_complexity_df$communication) = contr.sum(2)
+contrasts(inferred_complexity_df$communication)
+
+# Dummy code complexity
+inferred_complexity_df$dummy_complexity_mid <- 0
+inferred_complexity_df$dummy_complexity_mid[inferred_complexity_df$concept_number == 2] <- 1 
+inferred_complexity_df$dummy_complexity_mid <- factor(inferred_complexity_df$dummy_complexity_mid)
+  
+inferred_complexity_df$dummy_complexity_high <- 0
+inferred_complexity_df$dummy_complexity_high[inferred_complexity_df$concept_number == 3] <- 1 
+inferred_complexity_df$dummy_complexity_high <- factor(inferred_complexity_df$dummy_complexity_high)
+
+xmdl_control = lm(learner_inferred_complexity ~ dummy_complexity_mid + dummy_complexity_high, data=inferred_complexity_df)
+
+xmdl_main <- update(xmdl_control, ~ . + communication)
+
+xmdl_interaction <- update(xmdl_main, ~ . + dummy_complexity_mid:communication + dummy_complexity_high:communication)
+
+summary(xmdl_main)
+
+anova_comp <- anova(xmdl_control, xmdl_main, xmdl_interaction, test='Chisq')
+anova_comp
+
+# Generate table for appendix
+# xtable(tidy(xmdl_main))
+```
+
+# Cumulative Score
+# Appendix A, Table S3
+# Linear model predicting the learner's final score.
+```{r}
+final_score_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp1_df.csv")
+
+# Final level only
+final_score_df <- final_score_df %>% filter(level_number == 10)
+
+# Sum code communication
+final_score_df$communication <- factor(final_score_df$communication)
+contrasts(final_score_df$communication) = contr.sum(2)
+contrasts(final_score_df$communication)
+
+### Dummy code complexity 
+### Set Concept 1 as reference
+
+final_score_df$dummy_complexity_mid <- 0
+final_score_df$dummy_complexity_mid[final_score_df$concept_number == 2] <- 1 
+final_score_df$dummy_complexity_mid <- factor(final_score_df$dummy_complexity_mid)
+
+final_score_df$dummy_complexity_high <- 0
+final_score_df$dummy_complexity_high[final_score_df$concept_number == 3] <- 1 
+final_score_df$dummy_complexity_high <- factor(final_score_df$dummy_complexity_high)
+
+summary(final_score_df$dummy_complexity_high)
+
+xmdl_main = lm(cum_player_score ~ communication 
+               + dummy_complexity_mid 
+               + dummy_complexity_high, 
+               data=final_score_df)
+
+xmdl_interaction <- update(xmdl_main, ~ . 
+                           + dummy_complexity_mid:communication 
+                           + dummy_complexity_high:communication)
+
+summary(xmdl_interaction)
+anova_comp <- anova(xmdl_main, xmdl_interaction, test='Chisq')
+anova_comp
+
+## Generate table for appendix
+#xtable(tidy(xmdl_interaction))
+```
+
+
+# Learning Rate
+# Appendix D
+# Mixed effects model predicting per-level score
+```{r}
+complexity_per_level_scores_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp1_df.csv")
+
+# Center boolean_complexity
+complexity_per_level_scores_df$boolean_complexity_centered <- complexity_per_level_scores_df$boolean_complexity - (1 + 4 + 6) / 3
+
+# Sum code communication
+complexity_per_level_scores_df$communication <- factor(complexity_per_level_scores_df$communication)
+contrasts(complexity_per_level_scores_df$communication) = contr.sum(2)
+contrasts(complexity_per_level_scores_df$communication)
+
+# Null model uses only task UUID
+xmdl_null = lmer(pct_max_score ~ (1|task_uuid), complexity_per_level_scores_df)
+xmdl_main <- update(xmdl_null, ~ . + boolean_complexity_centered + communication + level_number)
+xmdl_two_way <- update(xmdl_main, ~ . + (boolean_complexity_centered + level_number + communication)^2)
+xmdl_three_way <- update(xmdl_two_way, ~ . + boolean_complexity_centered*communication*level_number)
+
+summary(xmdl_three_way)
+
+anova_all_comp <- anova(xmdl_null, xmdl_main, xmdl_two_way, xmdl_three_way, test='Chisq')
+anova_all_comp
+
+## Generate table for appendix
+# xtable(tidy(xmdl_three_way))
+```
+
+##### EXPERIMENT 2 ##### 
+
+# Transmission Fidelity
+# Main paper, section 3.2.1
+# Biniomial-Logistic regression on number of successes on post-trial questionnaire.
+```{r}
+logistic_viz_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp2_df.csv") 
+
+# Filter just for final level
+logistic_viz_df <- logistic_viz_df %>% filter(level_number == 10)
+
+# Optional: filter out "bad" teachers (Appendix B, Table )
+# logistic_viz_df <- logistic_viz_df %>% filter(bad_teacher == 'False')
+
+# Switch complexity to categorical and sum-code it
+logistic_viz_df$boolean_complexity[logistic_viz_df$concept_number == 1] <- 'low' 
+logistic_viz_df$boolean_complexity[logistic_viz_df$concept_number == 2] <- 'high'
+logistic_viz_df$boolean_complexity <- factor(logistic_viz_df$boolean_complexity)
+contrasts(logistic_viz_df$boolean_complexity) = contr.sum(2)
+
+# Sum code communication
+logistic_viz_df$communication <- factor(logistic_viz_df$communication)
+contrasts(logistic_viz_df$communication) = contr.sum(2)
+
+# Sum code context
+logistic_viz_df$context <- factor(logistic_viz_df$visibility)
+contrasts(logistic_viz_df$context) = contr.sum(2)
+
+logistic_viz_df$successes <- logistic_viz_df$learner_concept * 8
+  
+xmdl_main <- glm( cbind(successes, 8 - successes) ~ context + communication + boolean_complexity, family='binomial', data=logistic_viz_df)
+xmdl_interaction <- update(xmdl_main, ~ . + context:communication)
+
+summary(xmdl_interaction)
+xtable(tidy(xmdl_interaction))
+
+anova(xmdl_main, xmdl_interaction, test='Chisq')
+
+# Generate table for appendix
+# xtable(tidy(xmdl_interaction))
+```
+
+# Cumulative Score
+# Main paper, section 3.2.2
+# Linear model predicting the learner's final score.
+```{r}
+context_final_score_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp2_df.csv") 
+context_final_score_df <- context_final_score_df %>% filter(level_number == 10)
+
+# Filter out "bad" teachers (Appendix B)
+# context_final_score_df <- context_final_score_df %>% filter(bad_teacher == 'False')
+
+# High / low complexity
+context_final_score_df$boolean_complexity[context_final_score_df$concept_number == 1] <- 'low' 
+context_final_score_df$boolean_complexity[context_final_score_df$concept_number == 2] <- 'high'
+context_final_score_df$boolean_complexity <- factor(context_final_score_df$boolean_complexity)
+contrasts(context_final_score_df$boolean_complexity) = contr.sum(2)
+contrasts(context_final_score_df$boolean_complexity)
+
+# Sum code communication
+context_final_score_df$communication <- factor(context_final_score_df$communication)
+contrasts(context_final_score_df$communication) = contr.sum(2)
+contrasts(context_final_score_df$communication)
+
+# Sum code context
+context_final_score_df$context <- factor(context_final_score_df$visibility)
+contrasts(context_final_score_df$context) = contr.sum(2)
+contrasts(context_final_score_df$context)
+
+summary(context_final_score_df)
+
+xmdl_main <- lm(cum_player_score ~ boolean_complexity + communication  + context, data=context_final_score_df)
+xmdl_two_way <- update(xmdl_main, ~ . + communication:context)
+
+summary(xmdl_two_way)
+
+anova_viz_comp <- anova(xmdl_main, xmdl_two_way, test='Chisq')
+anova_viz_comp
+
+# Generate table for appendix
+# xtable(tidy(xmdl_key_two_way))
+```
+
+# Analysis of Optimal Demonstrations
+# Main paper, section 3.2.3
+# ANOVA testing for number of optimal demonstrations per condition.
+```{r}
+optimal_demo_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp2_demonstrations_df.csv") 
+
+optimal_demo_df$group <- paste(optimal_demo_df$visibility, optimal_demo_df$boolean_complexity)
+
+summary(optimal_demo_df)
+optimal_demo_df$group <- factor(optimal_demo_df$group)
+levels(optimal_demo_df$group)
+
+anova <- aov(n_optimal_demonstrations ~ group, data=optimal_demo_df)
+
+summary(anova)
+```
+
+# Analysis of Subjective Difficulties
+# Main paper, section 3.2.3
+# ANOVA testing reported difficulties across conditions and roles.
+```{r}
+difficulty_survey <- read.csv("~/src/naive_curriculum_exp/ipython/exp2_survey_difficulty_df.csv") 
+difficulty_survey$group <- factor(difficulty_survey$group)
+
+intermediate_difficulty <- difficulty_survey %>% filter(concept_number == 2)
+
+nrow(intermediate_difficulty)
+
+anova <- aov(difficulty ~ group, data=intermediate_difficulty)
+summary(anova)
+
+multcomps = glht(anova, linfct = mcp(group = "Tukey"))
+summary(multcomps)
+
+# xtable(tidy(multcomps))
+```
+
+# Learning Rate
+# Appendix D
+# Mixed effects model predicting per-level score
+```{r}
+context_mixed_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp2_df.csv") 
+
+# High / low complexity
+context_mixed_df$boolean_complexity[context_mixed_df$concept_number == 1] <- 'low' 
+context_mixed_df$boolean_complexity[context_mixed_df$concept_number == 2] <- 'high'
+context_mixed_df$boolean_complexity <- factor(context_mixed_df$boolean_complexity)
+contrasts(context_mixed_df$boolean_complexity) = contr.sum(2)
+contrasts(context_mixed_df$boolean_complexity)
+
+# Sum code communication
+context_mixed_df$communication <- factor(context_mixed_df$communication)
+contrasts(context_mixed_df$communication) = contr.sum(2)
+contrasts(context_mixed_df$communication)
+
+# Sum code context
+context_mixed_df$context <- factor(context_mixed_df$visibility)
+contrasts(context_mixed_df$context) = contr.sum(2)
+contrasts(context_mixed_df$context)
+
+summary(context_mixed_df)
+
+xmdl_null = lmer(pct_max_score ~ (1|task_uuid), context_mixed_df)
+xmdl_main <- update(xmdl_null, ~ . + boolean_complexity + communication + level_number + context)
+xmdl_two_way <- update(xmdl_main, ~ . + (communication + level_number + context)^2)
+xmdl_three_way <- update(xmdl_two_way, ~ . + context:communication:level_number)
+xmdl_all_three_way <- update(xmdl_three_way, ~ . + (boolean_complexity + communication + level_number + context)^3)
+xmdl_four_way <- update(xmdl_all_three_way, ~ . + context*communication*level_number*boolean_complexity)
+
+summary(xmdl_four_way)
+
+# Generate table for appendix
+# xtable(tidy(xmdl_three_way))
+
+anova_viz_comp <- anova(xmdl_null, xmdl_main, xmdl_two_way, xmdl_three_way, test='Chisq')
+anova_viz_comp
+```
+
+
+# Transmission Fidelity
+# Author Response
+# Biniomial-Logistic regression on number of successes on post-trial questionnaire.
+```{r}
+logistic_viz_df <- read.csv("~/src/naive_curriculum_exp/ipython/response_exp_df.csv") 
+
+# Filter just for final level
+logistic_viz_df <- logistic_viz_df %>% filter(level_number == 10)
+
+# Sum code context
+logistic_viz_df$context <- factor(logistic_viz_df$visibility)
+contrasts(logistic_viz_df$context) = contr.sum(2)
+
+logistic_viz_df$successes <- logistic_viz_df$learner_concept * 8
+  
+xmdl_main <- glm( cbind(successes, 8 - successes) ~ context, family='binomial', data=logistic_viz_df)
+
+summary(xmdl_main)
+xtable(tidy(xmdl_main))
+```
+
+# Concept Knowledge <--> Learner Score
+# Author Response
+# Linear regression predicting learner score from concept knowledge
+```{r}
+concept_knowledge_to_score_df <- read.csv("~/src/naive_curriculum_exp/ipython/exp1_df.csv")
+
+# Final level only
+concept_knowledge_to_score_df <- concept_knowledge_to_score_df %>% filter(level_number == 10)
+
+xmdl_main <- lm(cum_player_score ~ learner_concept, data=concept_knowledge_to_score_df)
+
+summary(xmdl_main)
+
+xtable(tidy(xmdl_main))
+```
+
+# Demonstration Optimality <--> Teacher Difficulty
+# Author Response
+# Linear regression(s) predicting teacher reported difficulty from optimality criteria
+```{r}
+demo_optimality <- read.csv("~/src/naive_curriculum_exp/ipython/demonstration_optimality_and_difficulty.csv")
+
+xmdl_main <- lm(difficulty_teacher ~ optimal_score, data=demo_optimality)
+
+summary(xmdl_main)
+
+xtable(tidy(xmdl_main))
+```
+```{r}
+xmdl_main <- lm(difficulty_teacher ~ optimal_features, data=demo_optimality)
+
+summary(xmdl_main)
+
+xtable(tidy(xmdl_main))
+```
+
+# Demonstration Optimality <--> Condition
+```{r}
+optimal_demo_df <- read.csv("~/src/naive_curriculum_exp/ipython/demonstration_optimality_by_condition.csv") 
+
+optimal_demo_df$group <- paste(optimal_demo_df$visibility, optimal_demo_df$boolean_complexity)
+
+summary(optimal_demo_df)
+optimal_demo_df$group <- factor(optimal_demo_df$group)
+levels(optimal_demo_df$group)
+
+# By "optimal score"
+anova <- aov(optimal_score ~ group, data=optimal_demo_df)
+summary(anova)
+
+# By "optimal features"
+anova <- aov(optimal_features ~ group, data=optimal_demo_df)
+summary(anova)
+```
+```

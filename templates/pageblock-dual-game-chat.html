@@ -1,0 +1,109 @@
+<head>
+    <style>
+        form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+        form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+    </style>
+</head>
+
+<div style="display:none;" id="prolific-complete" class='jspsych-display-element'>
+    <br>
+    <h1>Study complete!</h1>
+
+    <p>
+    <div id="prolific-completion-code"></div>
+    <p>
+        If you have problems submitting, please contact:
+        <a href="mailto:sumers@princeton.edu">sumers@princeton.edu</a>
+</div>
+
+<div id="container-instructions">
+    <div class="instructions well">
+
+        <div id="pageblock-dual-title" style="text-align:center"></div>
+
+        <div id="instructions-top" style="text-align:center"></div>
+
+        <div id="score-box" style="display: none">
+            <p>
+                <strong>Current Bonus: $<span id="current-bonus"></span></strong>
+            </p>
+        </div>
+
+        <div id="phaser-ui" style="display:table;width:100%;">
+            <div style="display:table-row">
+
+                <div id="left-game-window" style="display:table-cell;width:600px;"></div>
+                <div id="right-game-window" style="display:table-cell;width:600px;"></div>
+
+            </div>
+        </div>
+
+        <div id="chat-ui" style="display: none">
+            <ul id="chat-messages"></ul>
+            <form action="" class="chat-teacher">
+                <input id="chat-box" autocomplete="off" /><button id="chat-send">Send</button>
+            </form>
+        </div>
+
+        <div id="instructions-bottom" style="text-align:center"></div>
+
+        <script>
+
+            $('form').submit(function() {
+
+                $('#multiplayer-next').prop('disabled', false);
+
+                let message_text =  $('#chat-box').val();
+                let newMessage = {"name": "chat_message", "chat": message_text};
+
+                if (partnerPairCondition["learner"] === "human") {
+                    gameserverio.send_message(JSON.stringify(newMessage));
+                }
+                chatMessageQueue.push(newMessage);
+
+                $('#chat-messages').append($('<li>').text(message_text));
+                $('#chat-box').val('');
+
+                return false;
+
+            });
+
+        </script>
+
+    </div>
+    <hr />
+
+    <div id="multiplayer-nav" class="chat-teacher" style="display: none">
+        <div id="multiplayer-nav-text" style="text-align:center"></div>
+        <div class="row">
+            <div class="col-xs-5"></div>
+            <div class="col-xs-2 text-center">
+                <button type="button" id="multiplayer-next" class="btn btn-primary btn-lg continue" onclick="advancePartner()">
+                    Continue
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        function advancePartner() {
+
+            setPageBlockPostGameLoading(multiplayerAdvanceDelaySeconds);
+            gameserverio.send_message(JSON.stringify({"name": "next_page", "delay_seconds": multiplayerAdvanceDelaySeconds}));
+
+        }
+
+    </script>
+
+    <div class="instructionsnav">
+        <div class="row">
+            <div class="col-xs-5"></div>
+            <div class="col-xs-2 text-center">
+                <button type="button" id="next" value="next" class="btn btn-primary btn-lg continue">
+                Continue
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
